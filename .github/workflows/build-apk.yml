@@ -1,0 +1,87 @@
+# Builds the Android APKs on GitHub's servers -- nothing to install on your PC.
+# Runs on every push to main, or manually: Actions tab -> "Build APK" -> "Run workflow".
+# Result: a Release named "Build N" with two APKs (full + lite) to download on your phone.
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write          # needed to publish the Release with the APKs
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10 (also used by Chaquopy)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      # The models only need to be built once; later runs reuse them (until model_setup.py changes)
+      - name: Restore AI models from cache
+        id: models-cache
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: models-v1-${{ hashFiles('model_setup.py') }}
+
+      - name: Install model tools
+        if: steps.models-cache.outputs.cache-hit != 'true'
+        run: |
+          pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install transformers==4.57.6 sentencepiece==0.2.2 onnx==1.23.2 onnxruntime==1.23.2 \
+                      optimum==2.1.0 optimum-onnx==0.1.0 numpy==2.2.6
+
+      - name: Build INT8 ONNX models (~15 min, first run only)
+        if: steps.models-cache.outputs.cache-hit != 'true'
+        env:
+          USE_TF: "0"
+        run: python model_setup.py --test
+
+      - name: Build phrase database
+        run: python database_builder.py --reset
+
+      - name: Copy code + data into the Android project
+        run: python prepare_android.py --strict
+
+      - name: Build APKs (full + lite)
+        working-directory: android-app
+        run: gradle assembleFullDebug assembleLiteDebug --no-daemon --stacktrace
+
+      - name: Rename APKs
+        run: |
+          mkdir -p dist
+          cp android-app/app/build/outputs/apk/full/debug/app-full-debug.apk "dist/TLHil-full-build${{ github.run_number }}.apk"
+          cp android-app/app/build/outputs/apk/lite/debug/app-lite-debug.apk "dist/TLHil-lite-build${{ github.run_number }}.apk"
+          ls -lh dist
+
+      # Releases (not artifacts) because the 600 MB APK is over the free 500 MB artifact quota
+      - name: Publish Release with the APKs
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          body: |
+            **TLHil-full** – phrase list + AI translation (~600 MB). Works offline.
+            **TLHil-lite** – phrase list only (small). Works offline.
+            Install on the phone: download the .apk, open it, allow "Install unknown apps".
+          files: dist/*.apk
