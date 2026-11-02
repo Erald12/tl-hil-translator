@@ -1,0 +1,159 @@
+=====================================================================
+ HOW TO RUN: Tagalog <-> Hiligaynon offline translator  ->  Android APK
+ (Windows PC + vivo Y27)
+=====================================================================
+
+Recommended route: let GITHUB build the APK in the cloud.
+  -> No Android Studio, no Android SDK, no big downloads on your PC.
+  -> GitHub also builds the AI models itself, so you don't even need to run model_setup.py.
+
+Each build makes TWO apps (both work 100% offline):
+  TLHil-full-buildN.apk : phrase list + AI translation   (~550-600 MB)  any sentence
+  TLHil-lite-buildN.apk : phrase list only                (~30-40 MB)   known phrases only
+They have different names on the phone, so you can install both.
+
+Python project folder used below:
+  C:\Users\ADMIN\PycharmProjects\PythonProject\TagalogHiligaynonTranslator
+
+
+---------------------------------------------------------------------
+ STEP 1 - MAKE THE UPLOAD FOLDER (PyCharm, 1 second)
+---------------------------------------------------------------------
+
+Use a WINDOWS terminal (PowerShell), not WSL/Ubuntu:
+  the prompt must look like  PS C:\Users\ADMIN\...>   not  root@DESKTOP-...#
+  (PyCharm: Terminal tab -> down-arrow next to it -> "PowerShell".
+   If you stay in WSL, type python3 instead of python.)
+
+    cd C:\Users\ADMIN\PycharmProjects\PythonProject\TagalogHiligaynonTranslator
+    python make_upload_folder.py
+
+-> creates the folder  upload_to_github\  (about 19 files, ~120 KB).
+   It contains only what GitHub needs. NO models, NO databases: GitHub makes those.
+
+
+---------------------------------------------------------------------
+ STEP 2 - CREATE THE GITHUB REPOSITORY (web browser)
+---------------------------------------------------------------------
+
+1. Go to https://github.com/new
+2. Repository name: tl-hil-translator
+3. Choose Public or Private. Both work. Private = only you can see it.
+4. Leave "Add a README" etc. UNCHECKED -> click "Create repository".
+
+
+---------------------------------------------------------------------
+ STEP 3 - UPLOAD THE FILES (web browser, drag and drop)
+---------------------------------------------------------------------
+
+1. On the new empty repository page, click the link "uploading an existing file".
+2. Open  upload_to_github\  in Windows File Explorer.
+3. Select EVERYTHING inside it (Ctrl+A). This must include the ".github" folder,
+   the "android-app" folder and all the .py files.
+   Drag the selection into the browser window.
+   (Use Chrome or Edge: they keep the folder structure when you drag folders.)
+4. Wait until all files are listed, then click "Commit changes" (green button).
+
+Check: on the repository page you must see a folder named ".github".
+  If it is MISSING (some browsers skip folders that start with a dot):
+    a) Click "Add file" -> "Create new file"
+    b) As the file name, type exactly:   .github/workflows/build-apk.yml
+    c) Open upload_to_github\.github\workflows\build-apk.yml in Notepad,
+       copy all the text, and paste it into the browser.
+    d) Click "Commit changes".
+
+(If you have git installed, you can instead run these lines inside upload_to_github:
+     git init -b main
+     git add .
+     git commit -m "first upload"
+     git remote add origin https://github.com/YOUR-USERNAME/tl-hil-translator.git
+     git push -u origin main )
+
+
+---------------------------------------------------------------------
+ STEP 4 - WAIT FOR THE CLOUD BUILD (about 30-40 min the first time)
+---------------------------------------------------------------------
+
+1. Click the "Actions" tab of your repository. A run called "Build APK" starts
+   automatically after the upload. (If not: click "Build APK" on the left ->
+   "Run workflow" -> "Run workflow".)
+2. Click the run to watch it. Each step gets a green check mark when it is done.
+   The first build takes longer because it builds the AI models. Later builds reuse
+   them, so they take about 10-15 min.
+3. If a step gets a red X: click the step, copy the red error text, and send it to me.
+
+
+---------------------------------------------------------------------
+ STEP 5 - DOWNLOAD THE APK ON THE vivo Y27
+---------------------------------------------------------------------
+
+Easiest: do this directly ON THE PHONE (no cable needed):
+1. On the phone, open Chrome and go to:
+      https://github.com/YOUR-USERNAME/tl-hil-translator/releases
+   (Private repository: log in to GitHub in Chrome first.)
+2. Open the newest "Build N" -> under "Assets", tap
+      TLHil-lite-buildN.apk   (small, try this first)   or
+      TLHil-full-buildN.apk   (big, ~600 MB: use Wi-Fi)
+3. When the download finishes, tap it -> "Settings" -> allow "Install unknown apps"
+   for Chrome -> go back -> "Install".
+   If vivo shows a security warning, tap "Install anyway". This is normal for apps
+   that are not from the Play Store.
+
+First launch: the app prepares its offline files. For FULL, this takes about 1 minute.
+After that it opens quickly and needs no internet.
+
+Test: type "Kumusta ka?" -> tap "Tagalog -> Hiligaynon" -> "Kamusta ka?" (Source: phrase list).
+      FULL only: type a longer sentence -> "Source: AI model (via English)".
+
+
+---------------------------------------------------------------------
+ UPDATING THE APP LATER
+---------------------------------------------------------------------
+
+Change a file (e.g. add phrases to phrase_data.py), then upload that file to the
+repository again ("Add file" -> "Upload files" -> Commit). GitHub builds a new
+"Build N+1" automatically. Install it over the old app; it keeps working, no uninstall needed.
+
+
+---------------------------------------------------------------------
+ OPTIONAL - THINGS YOU CAN STILL RUN ON YOUR PC
+---------------------------------------------------------------------
+
+These are NOT needed for the APK (GitHub does it), but are useful for testing:
+
+  python database_builder.py --reset                  build + test the phrase DB
+  python database_builder.py search "maayong gabe"    try the fuzzy search
+  python fetch_corpus.py --json --include-phrases     download the open corpus (165 MB)
+  python model_setup.py --test                        build AI models locally (1.2 GB)
+  python translator.py models tgl hil "Saan ang palengke?"   test the AI models
+
+Building with Android Studio instead of GitHub (needs ~3 GB of downloads):
+  1. python model_setup.py --test       (makes the models folder)
+  2. python prepare_android.py          (copies code + data into android-app\)
+  3. Android Studio -> File -> Open -> select the  android-app  folder -> wait for sync.
+     If asked about a Gradle wrapper, let Android Studio create or use one.
+  4. Build -> Generate App Bundles or APKs -> Generate APKs
+     -> android-app\app\build\outputs\apk\full\debug\app-full-debug.apk
+
+
+---------------------------------------------------------------------
+ TROUBLESHOOTING
+---------------------------------------------------------------------
+
+* No "Build APK" run in the Actions tab:
+  the .github folder was not uploaded -> see the "Check" part of Step 3.
+  Also check Settings -> Actions -> General -> "Allow all actions" is selected.
+
+* Build fails at "Publish Release" with "Resource not accessible by integration" / 403:
+  Repository Settings -> Actions -> General -> "Workflow permissions" ->
+  select "Read and write permissions" -> Save. Then Actions -> re-run the failed job.
+
+* Build fails anywhere else: open the red step, copy the error lines, and send them to me.
+
+* Phone says "App not installed": uninstall the old version first (only needed if you
+  installed an APK from a different PC/build route before), then install again.
+
+* The full APK is too big for your phone storage or data plan: use the lite APK.
+
+* Licenses: the AI models are Helsinki-NLP OPUS-MT (CC-BY 4.0). Mention this in the app
+  or its description if you share it.
